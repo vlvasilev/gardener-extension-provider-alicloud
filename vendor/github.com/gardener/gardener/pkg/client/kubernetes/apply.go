@@ -253,7 +253,11 @@ func (c *Applier) mergeObjects(newObj, oldObj *unstructured.Unstructured, mergeF
 // ApplyManifest is a function which does the same like `kubectl apply -f <file>`. It takes a bunch of manifests <m>,
 // all concatenated in a byte slice, and sends them one after the other to the API server. If a resource
 // already exists at the API server, it will update it. It returns an error as soon as the first error occurs.
+<<<<<<< HEAD
 func (c *Applier) ApplyManifest(ctx context.Context, r UnstructuredReader, options MergeFuncs) error {
+=======
+func (c *Applier) ApplyManifest(ctx context.Context, r UnstructuredReader, options ApplierOptions) error {
+>>>>>>> implement migrate and restore functionality for infrasturucture
 	allErrs := &multierror.Error{
 		ErrorFormat: utilerrors.NewErrorFormatFuncWithPrefix("failed to apply manifests"),
 	}

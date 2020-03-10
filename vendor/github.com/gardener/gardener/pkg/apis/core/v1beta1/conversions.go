@@ -146,6 +146,10 @@ func Convert_core_ProjectSpec_To_v1beta1_ProjectSpec(in *core.ProjectSpec, out *
 	return nil
 }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> implement migrate and restore functionality for infrasturucture
 func Convert_v1beta1_ProjectMember_To_core_ProjectMember(in *ProjectMember, out *core.ProjectMember, s conversion.Scope) error {
 	if err := autoConvert_v1beta1_ProjectMember_To_core_ProjectMember(in, out, s); err != nil {
 		return err
@@ -179,7 +183,12 @@ func Convert_core_ProjectMember_To_v1beta1_ProjectMember(in *core.ProjectMember,
 	return nil
 }
 
+<<<<<<< HEAD
 func removeRoleFromRoles(roles []string, role string) []string {
+=======
+
+func removeRoleFromRoles(roles []string, role string) []string{
+>>>>>>> implement migrate and restore functionality for infrasturucture
 	var newRoles []string
 	for _, r := range roles {
 		if r != role {

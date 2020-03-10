@@ -184,8 +184,25 @@ func (a *actuator) getInitializerValues(
 	return a.terraformChartOps.ComputeUseVPCInitializerValues(config, vpcInfo), nil
 }
 
-func (a *actuator) newInitializer(infra *extensionsv1alpha1.Infrastructure, config *alicloudv1alpha1.InfrastructureConfig, values *InitializerValues) (terraformer.Initializer, error) {
-	chartValues := a.terraformChartOps.ComputeChartValues(infra, config, values)
+func (a *actuator) newDefaultInitializer(tf terraformer.Terraformer, infra *extensionsv1alpha1.Infrastructure, config *alicloudv1alpha1.InfrastructureConfig, credentials *alicloud.Credentials) (terraformer.Initializer, error) {
+	return a.newInitializer(tf, infra, config, credentials, "")
+}
+
+func (a *actuator) newInitializerFromState(tf terraformer.Terraformer, infra *extensionsv1alpha1.Infrastructure, config *alicloudv1alpha1.InfrastructureConfig, credentials *alicloud.Credentials) (terraformer.Initializer, error) {
+	terraformState, err := terraformer.UnmarshalRawState(infra.Status.State)
+	if err != nil {
+		return nil, err
+	}
+
+	return a.newInitializer(tf, infra, config, credentials, terraformState.Data)
+}
+
+func (a *actuator) newInitializer(tf terraformer.Terraformer, infra *extensionsv1alpha1.Infrastructure, config *alicloudv1alpha1.InfrastructureConfig, credentials *alicloud.Credentials, terraformState string) (terraformer.Initializer, error) {
+	initializerValues, err := a.getInitializerValues(tf, infra, config, credentials)
+	if err != nil {
+		return nil, err
+	}
+	chartValues := a.terraformChartOps.ComputeChartValues(infra, config, initializerValues)
 	release, err := a.ChartRenderer().Render(alicloud.InfraChartPath, alicloud.InfraRelease, infra.Namespace, chartValues)
 	if err != nil {
 		return nil, err
@@ -196,12 +213,7 @@ func (a *actuator) newInitializer(infra *extensionsv1alpha1.Infrastructure, conf
 		return nil, err
 	}
 
-	terraformState, err := terraformer.UnmarshalRawState(infra.Status.State)
-	if err != nil {
-		return nil, err
-	}
-
-	return a.terraformerFactory.DefaultInitializer(a.Client(), files.Main, files.Variables, files.TFVars, terraformState.Data), nil
+	return a.terraformerFactory.DefaultInitializer(a.Client(), files.Main, files.Variables, files.TFVars, terraformState), nil
 }
 
 func (a *actuator) newTerraformer(infra *extensionsv1alpha1.Infrastructure, credentials *alicloud.Credentials) (terraformer.Terraformer, error) {
@@ -386,12 +398,7 @@ func (a *actuator) Reconcile(ctx context.Context, infra *extensionsv1alpha1.Infr
 		return err
 	}
 
-	initializerValues, err := a.getInitializerValues(tf, infra, config, credentials)
-	if err != nil {
-		return err
-	}
-
-	initializer, err := a.newInitializer(infra, config, initializerValues)
+	initializer, err := a.newDefaultInitializer(tf, infra, config, credentials)
 	if err != nil {
 		return err
 	}
@@ -404,12 +411,44 @@ func (a *actuator) Reconcile(ctx context.Context, infra *extensionsv1alpha1.Infr
 		}
 	}
 
+	return a.updateProviderStatus(ctx, tf, infra, config, cluster)
+}
+
+// Restore implements infrastructure.Actuator.
+func (a *actuator) Restore(ctx context.Context, infra *extensionsv1alpha1.Infrastructure, cluster *extensioncontroller.Cluster) error {
+	config, credentials, err := a.getConfigAndCredentialsForInfra(ctx, infra)
+	if err != nil {
+		return err
+	}
+
+	tf, err := a.newTerraformer(infra, credentials)
+	if err != nil {
+		return err
+	}
+
+	initializer, err := a.newInitializerFromState(tf, infra, config, credentials)
+	if err != nil {
+		return err
+	}
+
+	if err := tf.InitializeWith(initializer).Apply(); err != nil {
+		a.logger.Error(err, "failed to apply the terraform config", "infrastructure", infra.Name)
+		return &controllererrors.RequeueAfterError{
+			Cause:        err,
+			RequeueAfter: 30 * time.Second,
+		}
+	}
+
+	return a.updateProviderStatus(ctx, tf, infra, config, cluster)
+}
+
+func (a *actuator) updateProviderStatus(ctx context.Context, tf terraformer.Terraformer, infra *extensionsv1alpha1.Infrastructure, infraConfig *alicloudv1alpha1.InfrastructureConfig, cluster *extensioncontroller.Cluster) error {
 	machineImages, err := a.shareCustomizedImages(ctx, infra, cluster)
 	if err != nil {
 		return errors.Wrapf(err, "failed to share the machine images")
 	}
 
-	status, err := a.extractStatus(tf, config, machineImages)
+	status, err := a.extractStatus(tf, infraConfig, machineImages)
 	if err != nil {
 		return err
 	}
@@ -520,4 +559,19 @@ func (a *actuator) Delete(ctx context.Context, infra *extensionsv1alpha1.Infrast
 		return flow.Causes(err)
 	}
 	return nil
+}
+
+// Migrate implements infrastructure.Actuator.
+func (a *actuator) Migrate(ctx context.Context, infra *extensionsv1alpha1.Infrastructure, cluster *extensioncontroller.Cluster) error {
+	_, credentials, err := a.getConfigAndCredentialsForInfra(ctx, infra)
+	if err != nil {
+		return err
+	}
+
+	tf, err := a.newTerraformer(infra, credentials)
+	if err != nil {
+		return err
+	}
+
+	return tf.CleanupConfiguration(ctx)
 }

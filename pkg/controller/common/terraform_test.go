@@ -94,6 +94,12 @@ var _ = Describe("Terraform", func() {
 					TerraformVarAccessKeyID:     accessKeyID,
 					TerraformVarAccessKeySecret: accessKeySecret,
 				}).Return(tf),
+<<<<<<< HEAD
+=======
+				tf.EXPECT().SetTerminationGracePeriodSeconds(int64(630)).Return(tf),
+				tf.EXPECT().SetDeadlineCleaning(5*time.Minute).Return(tf),
+				tf.EXPECT().SetDeadlinePod(15*time.Minute).Return(tf),
+>>>>>>> implement migrate and restore functionality for infrasturucture
 			)
 
 			actual, err := NewTerraformerWithAuth(factory, &config, purpose, namespace, name, &credentials)

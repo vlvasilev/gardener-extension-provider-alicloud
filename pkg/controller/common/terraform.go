@@ -38,6 +38,10 @@ func NewTerraformer(factory terraformer.Factory, config *rest.Config, purpose, n
 	}
 
 	return tf.
+<<<<<<< HEAD
+=======
+		SetVariablesEnvironment(variablesEnvironment).
+>>>>>>> implement migrate and restore functionality for infrasturucture
 		SetTerminationGracePeriodSeconds(630).
 		SetDeadlineCleaning(5 * time.Minute).
 		SetDeadlinePod(15 * time.Minute), nil
