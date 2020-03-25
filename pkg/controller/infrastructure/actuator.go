@@ -32,6 +32,7 @@ import (
 	commonext "github.com/gardener/gardener-extensions/pkg/controller/common"
 	controllererrors "github.com/gardener/gardener-extensions/pkg/controller/error"
 	"github.com/gardener/gardener-extensions/pkg/controller/infrastructure"
+
 	extensionschartrenderer "github.com/gardener/gardener-extensions/pkg/gardener/chartrenderer"
 	"github.com/gardener/gardener-extensions/pkg/terraformer"
 	"github.com/gardener/gardener-extensions/pkg/util"
@@ -185,19 +186,28 @@ func (a *actuator) getInitializerValues(
 }
 
 func (a *actuator) newDefaultInitializer(tf terraformer.Terraformer, infra *extensionsv1alpha1.Infrastructure, config *alicloudv1alpha1.InfrastructureConfig, credentials *alicloud.Credentials) (terraformer.Initializer, error) {
-	return a.newInitializer(tf, infra, config, credentials, "")
+	terraformFiles, err := a.extractTerraformFiles(tf, infra, config, credentials)
+	if err != nil {
+		return nil, err
+	}
+	return a.terraformerFactory.DefaultInitializer(a.Client(), terraformFiles.Main, terraformFiles.Variables, terraformFiles.TFVars), nil
 }
 
 func (a *actuator) newInitializerFromState(tf terraformer.Terraformer, infra *extensionsv1alpha1.Infrastructure, config *alicloudv1alpha1.InfrastructureConfig, credentials *alicloud.Credentials) (terraformer.Initializer, error) {
+	terraformFiles, err := a.extractTerraformFiles(tf, infra, config, credentials)
+	if err != nil {
+		return nil, err
+	}
+
 	terraformState, err := terraformer.UnmarshalRawState(infra.Status.State)
 	if err != nil {
 		return nil, err
 	}
 
-	return a.newInitializer(tf, infra, config, credentials, terraformState.Data)
+	return a.terraformerFactory.StateInitializer(a.Client(), terraformFiles.Main, terraformFiles.Variables, terraformFiles.TFVars, terraformState.Data), nil
 }
 
-func (a *actuator) newInitializer(tf terraformer.Terraformer, infra *extensionsv1alpha1.Infrastructure, config *alicloudv1alpha1.InfrastructureConfig, credentials *alicloud.Credentials, terraformState string) (terraformer.Initializer, error) {
+func (a *actuator) extractTerraformFiles(tf terraformer.Terraformer, infra *extensionsv1alpha1.Infrastructure, config *alicloudv1alpha1.InfrastructureConfig, credentials *alicloud.Credentials) (*chartutil.TerraformFiles, error) {
 	initializerValues, err := a.getInitializerValues(tf, infra, config, credentials)
 	if err != nil {
 		return nil, err
@@ -213,7 +223,7 @@ func (a *actuator) newInitializer(tf terraformer.Terraformer, infra *extensionsv
 		return nil, err
 	}
 
-	return a.terraformerFactory.DefaultInitializer(a.Client(), files.Main, files.Variables, files.TFVars, terraformState), nil
+	return files, nil
 }
 
 func (a *actuator) newTerraformer(infra *extensionsv1alpha1.Infrastructure, credentials *alicloud.Credentials) (terraformer.Terraformer, error) {
